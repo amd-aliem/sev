@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>virtee/sev — Interactive Demos</title>
+  <meta name="description" content="Interactive, in-browser demos for the AMD SEV / SEV-SNP sev crate: attestation report explorer and more." />
+  <link rel="stylesheet" href="assets/css/site.css" />
+</head>
+<body>
+  <main class="site-main">
+    <section class="hero">
+      <h1>Learn AMD <span class="grad">SEV-SNP</span> by taking it apart.</h1>
+      <p class="lead">
+        Interactive, in-browser demos built on the
+        <a href="https://github.com/virtee/sev"><code>sev</code></a> Rust crate.
+        Paste real data, watch it decode field by field, and see how confidential
+        computing works under the hood — no install, nothing leaves your browser.
+      </p>
+      <div class="cta">
+        <a class="btn primary" href="#demos">Explore the demos</a>
+        <a class="btn" href="https://github.com/virtee/sev">View the crate →</a>
+      </div>
+    </section>
+
+    <section id="demos">
+      <div class="section-head">
+        <h2>Demos</h2>
+        <p>One live to start — more on the way as the crate's logic is ported to WebAssembly.</p>
+      </div>
+      <div class="demo-grid" id="demo-grid"><!-- rendered from demos.js --></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { DEMOS } from "./assets/js/demos.js";
+    import { mountChrome } from "./assets/js/layout.js";
+
+    mountChrome({ base: "" });
+
+    const grid = document.getElementById("demo-grid");
+    grid.innerHTML = DEMOS.map((d) => {
+      const live = d.status === "live";
+      const tag = live ? "live" : "coming soon";
+      const link = live
+        ? `<a class="card-link" href="${d.href}">Open demo →</a>`
+        : `<span class="card-link" style="color:var(--text-mut)">Coming soon</span>`;
+      return `
+        <article class="demo-card ${live ? "live" : "soon"}">
+          <span class="tag">${tag}</span>
+          <div class="icon">${d.icon}</div>
+          <h3>${d.title}</h3>
+          <p>${d.blurb}</p>
+          ${link}
+        </article>`;
+    }).join("");
+  </script>
+</body>
+</html>

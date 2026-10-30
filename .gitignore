@@ -1,0 +1,18 @@
+# This is the gh-pages branch — a static site, not the Rust crate.
+# The crate's source lives on `main`. Ignore it here so it doesn't get
+# accidentally committed onto the site branch when both share a worktree.
+/src/
+/tests/
+/docs/
+/target/
+/build.rs
+/Cargo.toml
+/Cargo.lock
+/package-version.py
+/CODEOWNERS
+/.rustfmt.toml
+/.github/
+/.vscode/
+/.zed/
+/.claude/
+/.cline_storage/
