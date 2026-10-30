@@ -44,6 +44,16 @@ if the upstream format version changed. Key facts that cost time to rediscover:
   V3+, mitigation vectors (0x1F8/0x200) are V5-only. `layoutForVariant()`
   filters by `minVariant` and **synthesizes `_reserved` rows to fill gaps** so
   the map always tiles 0..1184 exactly.
+- **Mitigation vectors are decoded structurally, NOT semantically.**
+  `parseMitVector()` splits each u64 into its set-bit indices (`.bits`) and
+  `parseAttestationReport` computes `mit_diff` (bits in current-but-not-launch =
+  applied by a live firmware update after boot). We deliberately do **not** map
+  bit N → CVE: AMD states bit meanings are platform- and bug-specific and live
+  in Security Bulletins, not the ABI spec. The one public mapping that existed
+  (AMD-SB-3023: bit 3 = CVE-2025-48514) was retracted as wrong — so a decode
+  table would be both non-portable and actively incorrect. The card
+  (`mitBody()` in explorer.js) shows raw hex + bit chips + a launch↔current diff
+  banner + a note linking to the bulletins. Sample report has bits {0,3} set.
 - **Bitfield helpers** (`bit`/`field`) coerce with `BigInt(v)` because policy &
   platform_info are u64 (BigInt) but key_info is u32 (Number) — don't remove the
   coercion or u32 fields throw "Cannot mix BigInt".

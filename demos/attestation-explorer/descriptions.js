@@ -35,7 +35,7 @@ export const DESCRIPTIONS = {
     ids:
       "Unique identifiers for the chip and guest, key digests, and the report's cryptographic signature.",
     mitigation:
-      "CPU security mitigations active at launch and now (V5 reports only).",
+      "Bit vectors of firmware vulnerability mitigations, at launch vs. now (V5 only). Having both lets a guest detect a mitigation a live firmware update applied after it booted. Each bit's meaning is bug- and platform-specific (AMD Security Bulletins, not the ABI spec), so these are informational — firmware doesn't enforce them and neither should a verifier.",
   },
 
   // ---- per-field descriptions, grouped by card ----------------------------
@@ -110,8 +110,8 @@ export const DESCRIPTIONS = {
     },
 
     mitigation: {
-      "Launch mit. vector": "Bit vector of CPU security mitigations that were in effect when the guest launched (V5).",
-      "Current mit. vector": "Bit vector of CPU security mitigations in effect right now (V5).",
+      "Launch mit. vector": "Mitigations in effect when the guest launched (offset 0x1F8). Can also be mixed into derived keys for MSG_KEY_REQ v2+.",
+      "Current mit. vector": "Mitigations in effect when the report was generated (offset 0x200). A bit set here but not in the launch vector means the host applied it via live firmware update while the guest was already running.",
     },
   },
 };

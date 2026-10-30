@@ -227,6 +227,17 @@ function parseKeyInfo(v) {
 
 const SIG_ALGO = { 0: "Invalid", 1: "ECDSA P-384 with SHA-384" };
 
+// Mitigation vectors (V5) are 64-bit bit vectors of firmware vulnerability
+// mitigations. Each set bit is one mitigation; the MEANING of a bit is
+// platform- and bug-specific and published in AMD Security Bulletins, NOT in
+// the ABI spec — so we decode structure (which bits are set) but deliberately
+// do NOT map bits to CVEs. See demo CLAUDE.md.
+function parseMitVector(v) {
+  const bits = [];
+  for (let i = 0; i < 64; i++) if ((v >> BigInt(i)) & 1n) bits.push(i);
+  return { raw: v, hex: "0x" + v.toString(16), bits };
+}
+
 // ---- main entry point -----------------------------------------------------
 
 export function parseAttestationReport(bytes) {
@@ -286,8 +297,20 @@ export function parseAttestationReport(bytes) {
 
   // V5 adds launch/current mitigation vectors at 0x1F8..0x208.
   if (variant === "V5") {
-    report.launch_mit_vector = "0x" + u64(b, 0x1f8).toString(16);
-    report.current_mit_vector = "0x" + u64(b, 0x200).toString(16);
+    const launch = parseMitVector(u64(b, 0x1f8));
+    const current = parseMitVector(u64(b, 0x200));
+    report.launch_mit = launch;
+    report.current_mit = current;
+    // Backwards-compatible hex strings (kept for any existing consumer).
+    report.launch_mit_vector = launch.hex;
+    report.current_mit_vector = current.hex;
+    // Bits set now but NOT at launch = applied by a live firmware update after
+    // this guest booted. Bits set at launch but not now = unexpected regression.
+    const setL = new Set(launch.bits), setC = new Set(current.bits);
+    report.mit_diff = {
+      added: current.bits.filter((i) => !setL.has(i)),   // live-patched since launch
+      removed: launch.bits.filter((i) => !setC.has(i)),  // present at launch, gone now
+    };
   }
 
   return report;

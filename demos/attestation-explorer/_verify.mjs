@@ -100,6 +100,20 @@ assert(r.meta.variant === "V5", `variant is V5 (got ${r.meta.variant})`);
 assert(r.meta.generation === "Genoa", `generation is Genoa (got ${r.meta.generation})`);
 assert(r.key_info.signing_key === "VCEK", `signing key is VCEK (got ${r.key_info.signing_key})`);
 
+// Mitigation vectors (V5): structural decode into set-bit indices + diff.
+assert(r.launch_mit?.hex === "0x9", `launch mit hex 0x9 (got ${r.launch_mit?.hex})`);
+assert(JSON.stringify(r.launch_mit?.bits) === "[0,3]", `launch mit bits [0,3] (got ${JSON.stringify(r.launch_mit?.bits)})`);
+assert(JSON.stringify(r.current_mit?.bits) === "[0,3]", `current mit bits [0,3] (got ${JSON.stringify(r.current_mit?.bits)})`);
+assert(r.mit_diff?.added.length === 0 && r.mit_diff?.removed.length === 0, "sample has no launch↔current mit diff");
+
+// Synthetic live-patch case: flip on bit 5 in current_mit_vector (0x200) and
+// confirm the diff flags it as added (applied after launch).
+const patched = Uint8Array.from(bytes);
+patched[0x200] |= 1 << 5;               // current gains bit 5, launch unchanged
+const rp = parseAttestationReport(patched);
+assert(JSON.stringify(rp.mit_diff.added) === "[5]", `synthetic: bit 5 flagged as added (got ${JSON.stringify(rp.mit_diff.added)})`);
+assert(rp.mit_diff.removed.length === 0, "synthetic: nothing spuriously removed");
+
 // Invariant from parser.js: every variant tiles 0..REPORT_LEN with no gaps.
 for (const v of ["V2", "V3", "V5"]) {
   let cur = 0, ok = true;
@@ -120,6 +134,13 @@ assert(tipCount >= 40, `tooltips present on fields (${tipCount} data-tip attrs)`
 assert(html.includes('data-group="policy"'), "policy card rendered");
 assert(html.includes("Debugging is permitted"), "policy debug tooltip text present");
 assert(html.includes("cryptographic fingerprint"), "measurement tooltip text present");
+
+// Mitigation card: bit chips + "no diff" banner + security-bulletin note.
+assert(html.includes('data-group="mitigation"'), "mitigation card rendered");
+assert(html.includes('class="mit-bit"') || html.includes("mit-bit"), "mit bit chips rendered");
+assert(html.includes(">bit 3<"), "mit bit 3 chip present");
+assert(html.includes("no mitigation changed"), "no-diff banner rendered for sample");
+assert(html.includes("AMD Security Bulletins"), "security-bulletin note present");
 
 // ---- result ---------------------------------------------------------------
 

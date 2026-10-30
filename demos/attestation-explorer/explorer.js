@@ -108,6 +108,52 @@ function tcbTable(r) {
     </table>`;
 }
 
+// A single 64-bit mitigation vector rendered as its raw hex plus one chip per
+// set bit. `highlight` is a Set of bit indices to accent (the live-patch diff).
+function mitVectorRow(label, mit, group, highlight) {
+  if (!mit) {
+    return `<div${tipAttr(group, label)}>${esc(label)}</div><div><code>—</code></div>`;
+  }
+  const chips = mit.bits.length
+    ? `<div class="mit-bits">${mit.bits
+        .map((i) => `<span class="mit-bit${highlight?.has(i) ? " added" : ""}">bit ${i}</span>`)
+        .join("")}</div>`
+    : `<span class="mit-none">no mitigations set</span>`;
+  return (
+    `<div${tipAttr(group, label)}>${esc(label)}</div>` +
+    `<div><code>${esc(mit.hex)}</code>${chips}</div>`
+  );
+}
+
+function mitBody(r) {
+  const added = new Set(r.mit_diff?.added ?? []);
+  const removed = r.mit_diff?.removed ?? [];
+
+  // Launch-vs-current diff banner: the whole reason both vectors exist.
+  let banner = "";
+  if (r.mit_diff) {
+    if (added.size === 0 && removed.length === 0) {
+      banner = `<div class="mit-diff same">Launch and current vectors match — no mitigation changed since this guest booted.</div>`;
+    } else {
+      const parts = [];
+      if (added.size)
+        parts.push(`<b>${added.size}</b> mitigation${added.size > 1 ? "s" : ""} applied by a live firmware update <em>after</em> launch (bit ${[...added].join(", bit ")})`);
+      if (removed.length)
+        parts.push(`<b>${removed.length}</b> present at launch but not now (bit ${removed.join(", bit ")})`);
+      banner = `<div class="mit-diff changed">${parts.join("; ")}.</div>`;
+    }
+  }
+
+  const rows =
+    mitVectorRow("Launch mit. vector", r.launch_mit, "mitigation") +
+    mitVectorRow("Current mit. vector", r.current_mit, "mitigation", added);
+
+  // Why we don't translate bits to CVE names.
+  const note = `<div class="mit-note">Each bit is one firmware vulnerability mitigation. Bit meanings are <b>platform- and bug-specific</b> and published in <a href="https://www.amd.com/en/resources/product-security/" target="_blank" rel="noopener">AMD Security Bulletins</a>, not the ABI spec — so these are informational only and intentionally not decoded to CVE names here.</div>`;
+
+  return `<div class="kv mit-kv">${rows}</div>${banner}${note}`;
+}
+
 // ---- per-group card bodies ------------------------------------------------
 // `L` is a map from field name -> layout row, so bodies can tag hex blocks.
 
@@ -174,10 +220,7 @@ function cardBody(groupId, r, L) {
         hexBlock("Signature", r.signature, L.signature, "ids")
       );
     case "mitigation":
-      return kv([
-        ["Launch mit. vector", `<code>${esc(r.launch_mit_vector ?? "—")}</code>`],
-        ["Current mit. vector", `<code>${esc(r.current_mit_vector ?? "—")}</code>`],
-      ], "mitigation");
+      return mitBody(r);
     default:
       return "";
   }
@@ -193,7 +236,11 @@ function cardSummary(groupId, r) {
     case "tcb":        return r.meta.generation + " layout";
     case "data":       return "SHA-384";
     case "ids":        return "6 fields";
-    case "mitigation": return "V5";
+    case "mitigation": {
+      const n = r.current_mit?.bits.length ?? 0;
+      const added = r.mit_diff?.added.length ?? 0;
+      return added ? `${n} set · +${added} live` : `${n} set`;
+    }
     default:           return "";
   }
 }

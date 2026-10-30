@@ -163,6 +163,39 @@
 .copy:hover { color: var(--text); border-color: var(--accent); }
 .copy.done { color: var(--good); border-color: rgba(63,185,80,.4); }
 
+/* ---- mitigation vectors ---- */
+.mit-kv > div:nth-child(even) { display: block; }
+.mit-bits { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.mit-bit {
+  font-family: var(--mono); font-size: 11px;
+  padding: 2px 8px; border-radius: 20px;
+  border: 1px solid var(--border-hi); color: var(--text-dim);
+}
+/* a bit that current has but launch didn't = applied live after boot */
+.mit-bit.added {
+  color: var(--g); border-color: var(--g);
+  background: color-mix(in srgb, var(--g) 14%, transparent);
+}
+.mit-none { font-family: var(--mono); font-size: 11px; color: var(--text-mut); margin-left: 8px; }
+
+.mit-diff {
+  margin: 0 16px 12px; padding: 9px 12px;
+  font-size: 12px; line-height: 1.5; border-radius: 8px;
+}
+.mit-diff.same   { color: var(--text-dim); background: var(--bg-elev-2); border: 1px solid var(--border); }
+.mit-diff.changed {
+  color: var(--text);
+  background: color-mix(in srgb, var(--g) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g) 45%, transparent);
+}
+.mit-diff b { color: var(--g); }
+
+.mit-note {
+  padding: 11px 16px; border-top: 1px solid var(--border);
+  font-size: 11.5px; line-height: 1.5; color: var(--text-mut);
+}
+.mit-note a { color: var(--accent); }
+
 /* ---- TCB comparison table ---- */
 .tcb-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .tcb-table th, .tcb-table td { padding: 8px 12px; text-align: center; border-bottom: 1px solid var(--border); }
