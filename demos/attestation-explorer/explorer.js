@@ -235,8 +235,13 @@ document.getElementById("clear-btn").addEventListener("click", () => {
   errBox.textContent = "";
 });
 
-document.getElementById("sample-btn").addEventListener("click", async () => {
+async function loadSample() {
   const res = await fetch("./sample.b64");
   input.value = (await res.text()).trim();
   run();
-});
+}
+
+document.getElementById("sample-btn").addEventListener("click", loadSample);
+
+// Load the sample report by default so visitors see a decoded report immediately.
+loadSample();
