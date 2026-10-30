@@ -1,6 +1,6 @@
-// Attestation explorer UI — wires the textarea to parser.js and renders groups.
+// Attestation explorer UI — links a struct map (left) to decoded cards (right).
 import { mountChrome } from "../../assets/js/layout.js";
-import { decodeInput, parseAttestationReport } from "./parser.js";
+import { decodeInput, parseAttestationReport, layoutForVariant } from "./parser.js";
 
 mountChrome({ base: "../../" });
 
@@ -8,9 +8,24 @@ const input = document.getElementById("report-input");
 const out = document.getElementById("output");
 const errBox = document.getElementById("error");
 
+// Group metadata: ties a left-pane field's `group` to a right-pane card.
+// Order here is the order cards appear on the right.
+const GROUP_ORDER = ["identity", "policy", "platform", "key", "tcb", "data", "ids", "mitigation"];
+const GROUP_META = {
+  identity:   { title: "Identity",                icon: "🆔" },
+  policy:     { title: "Guest Policy",            icon: "📜" },
+  platform:   { title: "Platform Info",           icon: "🖥️" },
+  key:        { title: "Signing Key",             icon: "🔑" },
+  tcb:        { title: "TCB Versions",            icon: "🧬" },
+  data:       { title: "Measurement & Guest Data",icon: "📐" },
+  ids:        { title: "Identifiers & Signature", icon: "🔗" },
+  mitigation: { title: "Mitigation Vectors",      icon: "🛡️" },
+};
+
 // ---- small render helpers -------------------------------------------------
 
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const hx = (n, pad = 3) => "0x" + n.toString(16).toUpperCase().padStart(pad, "0");
 
 function kv(pairs) {
   return `<div class="kv">${pairs
@@ -27,23 +42,21 @@ function flags(obj, labels) {
     .join("")}</div>`;
 }
 
-function hexBlock(label, hex) {
+// A hex block tagged with the field it came from, so clicking its offset chip
+// can cross-link back to the struct map.
+function hexBlock(label, hex, field) {
+  const chip = field ? `<span class="off-chip" data-off="${field.off}">${hx(field.off)} · ${field.size}B</span>` : "";
   return `
-    <div class="hexblock">
-      ${label ? `<label class="field-label">${esc(label)}</label>` : ""}
+    <div class="hexblock" ${field ? `data-off="${field.off}"` : ""}>
+      <div class="hexblock-head">
+        ${label ? `<label class="field-label">${esc(label)}</label>` : ""}
+        ${chip}
+      </div>
       <div class="hexrow">
         <code class="hex">${esc(hex)}</code>
         <button class="copy" data-copy="${esc(hex)}">copy</button>
       </div>
     </div>`;
-}
-
-function group(title, badge, body, spanAll = false) {
-  return `
-    <section class="group${spanAll ? " span-all" : ""}">
-      <h3>${esc(title)}${badge ? `<span class="badge">${esc(badge)}</span>` : ""}</h3>
-      ${body}
-    </section>`;
 }
 
 function tcbField(v) {
@@ -76,54 +89,33 @@ function tcbTable(r) {
                 .join("")}</tr>`
           )
           .join("")}
+        <tr class="build-row"><td>Build (maj.min.bld)</td>
+          <td>${esc(r.current_build)}</td><td>—</td>
+          <td>${esc(r.committed_build)}</td><td>—</td></tr>
       </tbody>
     </table>`;
 }
 
-// ---- main render ----------------------------------------------------------
+// ---- per-group card bodies ------------------------------------------------
+// `L` is a map from field name -> layout row, so bodies can tag hex blocks.
 
-function render(r) {
-  const parts = [];
-
-  // summary banner
-  parts.push(`
-    <div class="summary-banner">
-      <span class="pill">Report <b>v${r.version}</b></span>
-      <span class="pill">Generation <b>${esc(r.meta.generation)}</b></span>
-      <span class="pill">Signing key <b>${esc(r.key_info.signing_key)}</b></span>
-      <span class="pill">VMPL <b>${r.vmpl}</b></span>
-      <span class="pill">${r.meta.byteLength} bytes</span>
-    </div>`);
-
-  parts.push('<div class="result-groups">');
-
-  // Identity
-  parts.push(
-    group(
-      "Identity",
-      null,
-      kv([
+function cardBody(groupId, r, L) {
+  switch (groupId) {
+    case "identity":
+      return kv([
         ["Version", r.version],
         ["Guest SVN", r.guest_svn],
         ["VMPL", r.vmpl],
-        ["Signature algo", `${esc(r.sig_algo.name)}`],
+        ["Signature algo", esc(r.sig_algo.name)],
         ["Family ID", `<code>${r.family_id}</code>`],
         ["Image ID", `<code>${r.image_id}</code>`],
         r.cpuid
-          ? ["CPUID", `family 0x${r.cpuid.family.toString(16)}, model 0x${r.cpuid.model.toString(16)}, step ${r.cpuid.step}`]
+          ? ["CPUID", `family ${hx(r.cpuid.family, 2)}, model ${hx(r.cpuid.model, 2)}, step ${r.cpuid.step}`]
           : ["CPUID", "— (v2 report)"],
-      ])
-    )
-  );
-
-  // Guest Policy
-  parts.push(
-    group(
-      "Guest Policy",
-      "0x" + r.policy.raw.toString(16),
-      kv([
-        ["ABI version", `${r.policy.abi_major}.${r.policy.abi_minor}`],
-      ]) +
+      ]);
+    case "policy":
+      return (
+        kv([["ABI version", `${r.policy.abi_major}.${r.policy.abi_minor}`]]) +
         flags(r.policy, [
           ["smt_allowed", "SMT"],
           ["migrate_ma_allowed", "Migrate MA"],
@@ -135,15 +127,9 @@ function render(r) {
           ["ciphertext_hiding", "Ciphertext hiding"],
           ["page_swap_disabled", "Page swap disabled"],
         ])
-    )
-  );
-
-  // Platform Info
-  parts.push(
-    group(
-      "Platform Info",
-      "0x" + r.plat_info.raw.toString(16),
-      flags(r.plat_info, [
+      );
+    case "platform":
+      return flags(r.plat_info, [
         ["smt_enabled", "SMT"],
         ["tsme_enabled", "TSME"],
         ["ecc_enabled", "ECC"],
@@ -151,58 +137,175 @@ function render(r) {
         ["ciphertext_hiding_enabled", "Ciphertext hiding"],
         ["alias_check_complete", "Alias check"],
         ["tio_enabled", "SEV-TIO"],
-      ])
-    )
-  );
-
-  // Key Info
-  parts.push(
-    group(
-      "Signing Key",
-      "0x" + r.key_info.raw.toString(16),
-      kv([
+      ]);
+    case "key":
+      return kv([
         ["Signing key", `<b>${esc(r.key_info.signing_key)}</b>`],
         ["Author key present", r.key_info.author_key_en ? "yes" : "no"],
         ["Mask chip key", r.key_info.mask_chip_key ? "yes" : "no"],
-      ])
-    )
-  );
+      ]);
+    case "tcb":
+      return tcbTable(r);
+    case "data":
+      return (
+        hexBlock("Measurement", r.measurement, L.measurement) +
+        hexBlock("Report data", r.report_data, L.report_data) +
+        hexBlock("Host data", r.host_data, L.host_data)
+      );
+    case "ids":
+      return (
+        hexBlock("Chip ID", r.chip_id, L.chip_id) +
+        hexBlock("Report ID", r.report_id, L.report_id) +
+        hexBlock("Report ID (MA)", r.report_id_ma, L.report_id_ma) +
+        hexBlock("ID key digest", r.id_key_digest, L.id_key_digest) +
+        hexBlock("Author key digest", r.author_key_digest, L.author_key_digest) +
+        hexBlock("Signature", r.signature, L.signature)
+      );
+    case "mitigation":
+      return kv([
+        ["Launch mit. vector", `<code>${esc(r.launch_mit_vector ?? "—")}</code>`],
+        ["Current mit. vector", `<code>${esc(r.current_mit_vector ?? "—")}</code>`],
+      ]);
+    default:
+      return "";
+  }
+}
 
-  // TCB (spans full width)
-  parts.push(group("TCB Versions", esc(r.meta.generation) + " layout", tcbTable(r), true));
+// Short, human summary shown in a card's header (visible when collapsed).
+function cardSummary(groupId, r) {
+  switch (groupId) {
+    case "identity":   return `v${r.version} · ${r.meta.generation}`;
+    case "policy":     return "0x" + r.policy.raw.toString(16);
+    case "platform":   return "0x" + r.plat_info.raw.toString(16);
+    case "key":        return r.key_info.signing_key;
+    case "tcb":        return r.meta.generation + " layout";
+    case "data":       return "SHA-384";
+    case "ids":        return "6 fields";
+    case "mitigation": return "V5";
+    default:           return "";
+  }
+}
 
-  // Measurement & guest data
-  parts.push(
-    group(
-      "Measurement & Guest Data",
-      "SHA-384",
-      hexBlock("Measurement (48 bytes)", r.measurement) +
-        hexBlock("Report data (64 bytes)", r.report_data) +
-        hexBlock("Host data (32 bytes)", r.host_data),
-      true
-    )
-  );
+// ---- main render ----------------------------------------------------------
 
-  // Identifiers & signature
-  parts.push(
-    group(
-      "Identifiers & Signature",
-      null,
-      hexBlock("Chip ID (64 bytes)", r.chip_id) +
-        hexBlock("Report ID (32 bytes)", r.report_id) +
-        hexBlock("ID key digest (48 bytes)", r.id_key_digest) +
-        hexBlock("Author key digest (48 bytes)", r.author_key_digest) +
-        hexBlock("Signature (512 bytes)", r.signature),
-      true
-    )
-  );
+function render(r) {
+  const fields = layoutForVariant(r.meta.variant);
+  // name -> layout row (skip reserved; last wins is fine, names are unique except _reserved)
+  const L = {};
+  for (const f of fields) if (f.group) L[f.name] = f;
 
-  parts.push("</div>");
-  out.innerHTML = parts.join("");
+  // which groups are actually present (so we don't render empty cards)
+  const present = new Set(fields.map((f) => f.group).filter(Boolean));
+  const groups = GROUP_ORDER.filter((g) => present.has(g));
 
-  // wire copy buttons
+  // ---- left: struct map ----
+  const rows = fields
+    .map((f) => {
+      const reserved = !f.group;
+      const variantTag = f.minVariant ? `<span class="vtag">v${f.minVariant}+</span>` : "";
+      return `
+        <li class="srow${reserved ? " reserved" : ""}"
+            ${reserved ? "" : `data-group="${f.group}"`} data-off="${f.off}">
+          <span class="off">${hx(f.off)}</span>
+          <span class="sz">${f.size}B</span>
+          <span class="fname">${esc(f.name)}${variantTag}</span>
+          <span class="ftype">${esc(f.type)}</span>
+        </li>`;
+    })
+    .join("");
+
+  const structMap = `
+    <aside class="struct-map">
+      <div class="struct-head">
+        <code>struct AttestationReport</code>
+        <span>${r.meta.byteLength} bytes</span>
+      </div>
+      <ol class="struct-rows">${rows}</ol>
+      <div class="struct-foot">Hover a field to find it · click to open its card</div>
+    </aside>`;
+
+  // ---- right: cards ----
+  const cards = groups
+    .map((g) => {
+      const m = GROUP_META[g];
+      return `
+        <section class="group" data-group="${g}">
+          <button class="group-head" aria-expanded="true">
+            <span class="swatch"></span>
+            <span class="g-icon">${m.icon}</span>
+            <span class="g-title">${esc(m.title)}</span>
+            <span class="g-summary">${esc(cardSummary(g, r))}</span>
+            <span class="chevron">▾</span>
+          </button>
+          <div class="group-body">${cardBody(g, r, L)}</div>
+        </section>`;
+    })
+    .join("");
+
+  out.innerHTML = `
+    <div class="summary-banner">
+      <span class="pill">Report <b>v${r.version}</b></span>
+      <span class="pill">Generation <b>${esc(r.meta.generation)}</b></span>
+      <span class="pill">Signing key <b>${esc(r.key_info.signing_key)}</b></span>
+      <span class="pill">VMPL <b>${r.vmpl}</b></span>
+      <span class="pill">${r.meta.byteLength} bytes</span>
+    </div>
+    <div class="dissect">
+      ${structMap}
+      <div class="cards">${cards}</div>
+    </div>`;
+
+  wireInteractions();
+}
+
+// ---- interactions ---------------------------------------------------------
+
+function wireInteractions() {
+  const srows = [...out.querySelectorAll(".srow[data-group]")];
+  const cards = [...out.querySelectorAll(".group")];
+  const cardByGroup = (g) => cards.find((c) => c.dataset.group === g);
+
+  const setHL = (g, on) => {
+    srows.forEach((s) => s.classList.toggle("hl", on && s.dataset.group === g));
+    cards.forEach((c) => c.classList.toggle("hl", on && c.dataset.group === g));
+  };
+
+  // hover linking, both directions
+  srows.forEach((s) => {
+    s.addEventListener("mouseenter", () => setHL(s.dataset.group, true));
+    s.addEventListener("mouseleave", () => setHL(s.dataset.group, false));
+    s.addEventListener("click", () => openCard(s.dataset.group));
+  });
+  cards.forEach((c) => {
+    c.addEventListener("mouseenter", () => setHL(c.dataset.group, true));
+    c.addEventListener("mouseleave", () => setHL(c.dataset.group, false));
+  });
+
+  // collapse / expand on header click
+  out.querySelectorAll(".group-head").forEach((h) => {
+    h.addEventListener("click", () => {
+      const card = h.closest(".group");
+      const collapsed = card.classList.toggle("collapsed");
+      h.setAttribute("aria-expanded", String(!collapsed));
+    });
+  });
+
+  // offset chips inside hex blocks jump to the struct row
+  out.querySelectorAll(".off-chip").forEach((chip) => {
+    chip.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const row = srows.find((s) => s.dataset.off === chip.dataset.off);
+      if (row) {
+        row.scrollIntoView({ behavior: "smooth", block: "center" });
+        flash(row);
+      }
+    });
+  });
+
+  // copy buttons
   out.querySelectorAll(".copy").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
       await navigator.clipboard.writeText(btn.dataset.copy);
       btn.textContent = "copied";
       btn.classList.add("done");
@@ -212,6 +315,21 @@ function render(r) {
       }, 1200);
     });
   });
+
+  function openCard(g) {
+    const card = cardByGroup(g);
+    if (!card) return;
+    card.classList.remove("collapsed");
+    card.querySelector(".group-head").setAttribute("aria-expanded", "true");
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    flash(card);
+  }
+
+  function flash(el) {
+    el.classList.remove("flash");
+    void el.offsetWidth; // restart animation
+    el.classList.add("flash");
+  }
 }
 
 // ---- events ---------------------------------------------------------------

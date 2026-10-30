@@ -15,6 +15,73 @@
 
 export const REPORT_LEN = 1184;
 
+// ---- struct layout --------------------------------------------------------
+//
+// The on-wire struct, in declaration order, mirroring AttestationReport in
+// src/firmware/guest/types/snp.rs. This is the single source of truth for the
+// left-hand "struct map": each row is one field with its byte offset, size,
+// C-ish type, and the `group` it feeds on the right (so the two panes link).
+//
+// `minVariant` marks fields that only exist in later report versions:
+//   2 = all reports, 3 = V3+, 5 = V5 only.
+export const LAYOUT = [
+  { off: 0x000, size: 4,   name: "version",           type: "u32",       group: "identity" },
+  { off: 0x004, size: 4,   name: "guest_svn",         type: "u32",       group: "identity" },
+  { off: 0x008, size: 8,   name: "policy",            type: "u64",       group: "policy" },
+  { off: 0x010, size: 16,  name: "family_id",         type: "u8[16]",    group: "identity" },
+  { off: 0x020, size: 16,  name: "image_id",          type: "u8[16]",    group: "identity" },
+  { off: 0x030, size: 4,   name: "vmpl",              type: "u32",       group: "identity" },
+  { off: 0x034, size: 4,   name: "signature_algo",    type: "u32",       group: "identity" },
+  { off: 0x038, size: 8,   name: "current_tcb",       type: "TcbVersion",group: "tcb" },
+  { off: 0x040, size: 8,   name: "platform_info",     type: "u64",       group: "platform" },
+  { off: 0x048, size: 4,   name: "key_info",          type: "u32",       group: "key" },
+  { off: 0x050, size: 64,  name: "report_data",       type: "u8[64]",    group: "data" },
+  { off: 0x090, size: 48,  name: "measurement",       type: "u8[48]",    group: "data" },
+  { off: 0x0c0, size: 32,  name: "host_data",         type: "u8[32]",    group: "data" },
+  { off: 0x0e0, size: 48,  name: "id_key_digest",     type: "u8[48]",    group: "ids" },
+  { off: 0x110, size: 48,  name: "author_key_digest", type: "u8[48]",    group: "ids" },
+  { off: 0x140, size: 32,  name: "report_id",         type: "u8[32]",    group: "ids" },
+  { off: 0x160, size: 32,  name: "report_id_ma",      type: "u8[32]",    group: "ids" },
+  { off: 0x180, size: 8,   name: "reported_tcb",      type: "TcbVersion",group: "tcb" },
+  { off: 0x188, size: 1,   name: "cpuid_fam_id",      type: "u8",        group: "identity", minVariant: 3 },
+  { off: 0x189, size: 1,   name: "cpuid_mod_id",      type: "u8",        group: "identity", minVariant: 3 },
+  { off: 0x18a, size: 1,   name: "cpuid_step",        type: "u8",        group: "identity", minVariant: 3 },
+  { off: 0x1a0, size: 64,  name: "chip_id",           type: "u8[64]",    group: "ids" },
+  { off: 0x1e0, size: 8,   name: "committed_tcb",     type: "TcbVersion",group: "tcb" },
+  { off: 0x1e8, size: 4,   name: "current_build",     type: "Version",   group: "tcb" },
+  { off: 0x1ec, size: 4,   name: "committed_build",   type: "Version",   group: "tcb" },
+  { off: 0x1f0, size: 8,   name: "launch_tcb",        type: "TcbVersion",group: "tcb" },
+  { off: 0x1f8, size: 8,   name: "launch_mit_vector", type: "u64",       group: "mitigation", minVariant: 5 },
+  { off: 0x200, size: 8,   name: "current_mit_vector",type: "u64",       group: "mitigation", minVariant: 5 },
+  { off: 0x2a0, size: 512, name: "signature",         type: "Signature", group: "ids" },
+];
+
+/**
+ * Rows of LAYOUT present for a given variant ("V2"|"V3"|"V5"), with reserved
+ * padding synthesized to fill any gaps. The result always tiles 0..REPORT_LEN
+ * exactly, so the struct map is a faithful, gap-free picture of the bytes.
+ */
+export function layoutForVariant(variant) {
+  const max = variant === "V2" ? 2 : variant === "V3" ? 3 : 5;
+  const present = LAYOUT.filter((f) => (f.minVariant ?? 2) <= max).sort((a, b) => a.off - b.off);
+
+  const out = [];
+  let cur = 0;
+  for (const f of present) {
+    if (f.off > cur) {
+      const size = f.off - cur;
+      out.push({ off: cur, size, name: "_reserved", type: `u8[${size}]`, group: null });
+    }
+    out.push(f);
+    cur = f.off + f.size;
+  }
+  if (cur < REPORT_LEN) {
+    const size = REPORT_LEN - cur;
+    out.push({ off: cur, size, name: "_reserved", type: `u8[${size}]`, group: null });
+  }
+  return out;
+}
+
 // ---- input decoding -------------------------------------------------------
 
 /** Accept hex (with optional 0x / whitespace / colons) or base64; return Uint8Array. */
