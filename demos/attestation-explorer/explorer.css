@@ -74,6 +74,11 @@
   background: color-mix(in srgb, var(--g) 16%, transparent);
   border-left-color: var(--g);
 }
+.srow.pinned {
+  background: color-mix(in srgb, var(--g) 28%, transparent);
+  border-left-color: var(--g);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--g) 50%, transparent);
+}
 
 .struct-foot { padding: 9px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-mut); }
 
@@ -87,9 +92,16 @@
   background: var(--bg-elev);
   overflow: hidden;
   scroll-margin-top: 76px;
+  cursor: pointer;
   transition: border-color .12s, box-shadow .12s;
 }
+.group:focus { outline: none; }
+/* hover preview: soft glow */
 .group.hl { box-shadow: 0 0 0 1px var(--g), 0 0 18px -6px var(--g); }
+/* pinned: stronger, persistent ring + tinted header */
+.group.pinned { box-shadow: 0 0 0 2px var(--g), 0 0 22px -4px var(--g); }
+.group.pinned .group-head { background: color-mix(in srgb, var(--g) 14%, var(--bg-elev-2)); }
+.group.pinned .pin-dot { opacity: 1; }
 
 .group-head {
   width: 100%;
@@ -98,9 +110,8 @@
   background: var(--bg-elev-2);
   border: none; border-bottom: 1px solid var(--border);
   color: var(--text); font-family: var(--sans); font-size: 14px; text-align: left;
-  cursor: pointer;
 }
-.group-head:hover { background: #20262f; }
+.group:hover .group-head { background: #20262f; }
 .group-head .swatch { width: 10px; height: 10px; border-radius: 3px; background: var(--g); flex: none; }
 .group-head .g-icon { font-size: 15px; }
 .group-head .g-title { font-weight: 600; }
@@ -108,10 +119,7 @@
   margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--text-dim);
   border: 1px solid var(--border-hi); border-radius: 20px; padding: 2px 9px;
 }
-.group-head .chevron { color: var(--text-mut); transition: transform .15s; font-size: 11px; }
-.group.collapsed .chevron { transform: rotate(-90deg); }
-.group.collapsed .group-body { display: none; }
-.group.collapsed .group-head { border-bottom: none; }
+.group-head .pin-dot { font-size: 12px; opacity: 0; transition: opacity .12s; }
 
 /* ---- key/value rows ---- */
 .kv { display: grid; grid-template-columns: 150px 1fr; }

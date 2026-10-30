@@ -171,7 +171,7 @@ function cardBody(groupId, r, L) {
   }
 }
 
-// Short, human summary shown in a card's header (visible when collapsed).
+// Short, human summary shown on the right of a card's header.
 function cardSummary(groupId, r) {
   switch (groupId) {
     case "identity":   return `v${r.version} · ${r.meta.generation}`;
@@ -229,14 +229,14 @@ function render(r) {
     .map((g) => {
       const m = GROUP_META[g];
       return `
-        <section class="group" data-group="${g}">
-          <button class="group-head" aria-expanded="true">
+        <section class="group" data-group="${g}" tabindex="0">
+          <div class="group-head">
             <span class="swatch"></span>
             <span class="g-icon">${m.icon}</span>
             <span class="g-title">${esc(m.title)}</span>
             <span class="g-summary">${esc(cardSummary(g, r))}</span>
-            <span class="chevron">▾</span>
-          </button>
+            <span class="pin-dot" title="Pinned">📌</span>
+          </div>
           <div class="group-body">${cardBody(g, r, L)}</div>
         </section>`;
     })
@@ -265,37 +265,59 @@ function wireInteractions() {
   const cards = [...out.querySelectorAll(".group")];
   const cardByGroup = (g) => cards.find((c) => c.dataset.group === g);
 
-  const setHL = (g, on) => {
-    srows.forEach((s) => s.classList.toggle("hl", on && s.dataset.group === g));
-    cards.forEach((c) => c.classList.toggle("hl", on && c.dataset.group === g));
+  let pinned = null; // the one group whose highlight persists
+  let hovered = null;
+
+  // Reflect pin + hover state onto both panes.
+  const paint = () => {
+    for (const el of [...srows, ...cards]) {
+      const g = el.dataset.group;
+      el.classList.toggle("pinned", g === pinned);
+      el.classList.toggle("hl", g === hovered && g !== pinned);
+    }
   };
 
-  // hover linking, both directions
+  const setHover = (g) => { hovered = g; paint(); };
+
+  // Pin a group (one at a time). Re-pinning the same group unpins it.
+  // `scrollCard` brings the right-hand card into view (used from the left pane).
+  const pin = (g, { scrollCard = false } = {}) => {
+    pinned = pinned === g ? null : g;
+    paint();
+    if (pinned && scrollCard) {
+      const card = cardByGroup(pinned);
+      if (card) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+        flash(card);
+      }
+    }
+  };
+
+  // left pane: hover to preview, click to pin + scroll the matching card
   srows.forEach((s) => {
-    s.addEventListener("mouseenter", () => setHL(s.dataset.group, true));
-    s.addEventListener("mouseleave", () => setHL(s.dataset.group, false));
-    s.addEventListener("click", () => openCard(s.dataset.group));
-  });
-  cards.forEach((c) => {
-    c.addEventListener("mouseenter", () => setHL(c.dataset.group, true));
-    c.addEventListener("mouseleave", () => setHL(c.dataset.group, false));
+    s.addEventListener("mouseenter", () => setHover(s.dataset.group));
+    s.addEventListener("mouseleave", () => setHover(null));
+    s.addEventListener("click", () => pin(s.dataset.group, { scrollCard: true }));
   });
 
-  // collapse / expand on header click
-  out.querySelectorAll(".group-head").forEach((h) => {
-    h.addEventListener("click", () => {
-      const card = h.closest(".group");
-      const collapsed = card.classList.toggle("collapsed");
-      h.setAttribute("aria-expanded", String(!collapsed));
+  // right pane: hover to preview, click anywhere on the card to pin
+  cards.forEach((c) => {
+    c.addEventListener("mouseenter", () => setHover(c.dataset.group));
+    c.addEventListener("mouseleave", () => setHover(null));
+    c.addEventListener("click", (e) => {
+      if (e.target.closest(".copy, .off-chip")) return; // those have their own actions
+      pin(c.dataset.group);
     });
   });
 
-  // offset chips inside hex blocks jump to the struct row
+  // offset chips inside hex blocks jump to the struct row (and pin the group)
   out.querySelectorAll(".off-chip").forEach((chip) => {
     chip.addEventListener("click", (e) => {
       e.stopPropagation();
       const row = srows.find((s) => s.dataset.off === chip.dataset.off);
       if (row) {
+        pinned = row.dataset.group;
+        paint();
         row.scrollIntoView({ behavior: "smooth", block: "center" });
         flash(row);
       }
@@ -315,15 +337,6 @@ function wireInteractions() {
       }, 1200);
     });
   });
-
-  function openCard(g) {
-    const card = cardByGroup(g);
-    if (!card) return;
-    card.classList.remove("collapsed");
-    card.querySelector(".group-head").setAttribute("aria-expanded", "true");
-    card.scrollIntoView({ behavior: "smooth", block: "center" });
-    flash(card);
-  }
 
   function flash(el) {
     el.classList.remove("flash");
