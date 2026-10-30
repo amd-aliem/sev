@@ -9,11 +9,21 @@ browser and links the byte struct (left) to decoded cards (right).
   `REPORT_LEN`, `LAYOUT`, `layoutForVariant()`, `decodeInput()`,
   `parseAttestationReport()`. This is the WASM swap point (see bottom).
 - `explorer.js` — UI. Renders struct map + cards from the parser, wires
-  pin/hover/scroll interactions.
+  pin/hover/scroll interactions, and the hover-tooltip engine (`wireTooltips`,
+  one bubble appended to `<body>` so cards' `overflow:hidden` can't clip it).
+- `descriptions.js` — **human-editable tooltip text**, co-located so non-coders
+  can edit it. `DESCRIPTIONS.groups[g]` = card-title tooltip;
+  `DESCRIPTIONS.fields[g][key]` = per-field. `key` matches what the UI passes:
+  policy/platform flags by bit key (`smt_allowed`), everything else by its
+  visible label (`"Guest SVN"`, `"Measurement"`, TCB row/col `"SNP"`/`"Current"`).
+  Missing entry = no tooltip. Adding a field? Add its description here too.
 - `explorer.css` — demo styling; per-group color via `--g` CSS var keyed off
   `[data-group="…"]`.
 - `index.html` — page shell + intro copy.
 - `sample.b64` — default report, auto-loaded on page open.
+- `_verify.mjs` — headless check: `node _verify.mjs`. Parser asserts + full UI
+  render (tooltip count, field text) against a DOM stub. Run after any change
+  here; extend its assertions rather than hand-rolling a stub.
 
 ## Byte layout — DON'T re-derive from the crate
 

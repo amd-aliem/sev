@@ -43,18 +43,26 @@ client-side; nothing is uploaded (say so in UI copy).
 
 ## Verify without a browser (no browser is installed on this box)
 
-Node can exercise the ES modules directly. Shim the two browser globals the
-parser/UI touch:
+Node can exercise the ES modules directly.
+
+- Syntax check every module you touch: `node --check <file.js>`.
+- **attestation-explorer has a checked-in harness: `node demos/attestation-explorer/_verify.mjs`.**
+  It does the parser-only logic check *and* the full UI render check (imports
+  `explorer.js` against a complete DOM stub, asserts `output.innerHTML`), and
+  exits non-zero on failure. Extend its assertions when you touch that demo
+  instead of rebuilding a stub.
+- Building a stub from scratch for another demo? The two-global shim
+  (`atob` + `fetch` below) is enough to import a **parser** module, but importing
+  a **UI** module that calls `mountChrome` also needs `document`/`window`, and
+  `body.prepend`/`append`. `navigator` is a read-only getter in Node (use
+  `Object.defineProperty`, not assignment), and relative imports resolve from the
+  stub file's own dir. See `_verify.mjs` for a full, working example to copy.
 
 ```js
 globalThis.atob = (b64) => Buffer.from(b64, "base64").toString("binary");
 globalThis.fetch = async () => ({ text: async () => readFileSync("./sample.b64","utf8") });
 ```
 
-- Syntax check every module you touch: `node --check <file.js>`.
-- Logic check: import the parser, decode `sample.b64`, assert field values.
-- Full render check: stub a minimal `document` (getElementById → fake els with
-  `querySelectorAll()=>[]`), import the UI module, read `output.innerHTML`.
 - Serve for the user to eyeball: `python3 -m http.server 8099`.
 
 **I cannot see the painted page.** Structure/logic I verify programmatically;
