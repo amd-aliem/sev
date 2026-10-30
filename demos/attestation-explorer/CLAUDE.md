@@ -71,7 +71,13 @@ for (const v of ["V2","V3","V5"]) {
 ## UI model (so you don't reverse-engineer it)
 
 - Left `.srow[data-group]` ↔ right `.group[data-group]` linked by group id.
-  Groups: identity, policy, platform, key, tcb, data, ids, mitigation.
+  Groups: identity, policy, platform, key, tcb, data, idblock, ids, mitigation.
+  **idblock** collects the guest-owner identity fields that trace to the ID
+  block (guest_svn, family_id, image_id) and ID auth struct (id_key_digest,
+  author_key_digest) — see `idBlockBody()`. When all are zero no ID block was
+  used at launch (`idBlockUsed()` gates the notice + card summary). identity is
+  now just report metadata (version, vmpl, sig algo, cpuid); ids is firmware
+  IDs + signature only.
 - **One pin at a time.** Click pins a group's highlight; re-click same = unpin;
   click other = move pin. Clicking a left field pins + autoscrolls the card.
   Hover = transient preview that yields to the pin. Offset chips pin + scroll to

@@ -11,7 +11,7 @@ const errBox = document.getElementById("error");
 
 // Group metadata: ties a left-pane field's `group` to a right-pane card.
 // Order here is the order cards appear on the right.
-const GROUP_ORDER = ["identity", "policy", "platform", "key", "tcb", "data", "ids", "mitigation"];
+const GROUP_ORDER = ["identity", "policy", "platform", "key", "tcb", "data", "idblock", "ids", "mitigation"];
 const GROUP_META = {
   identity:   { title: "Identity",                icon: "🆔" },
   policy:     { title: "Guest Policy",            icon: "📜" },
@@ -19,6 +19,7 @@ const GROUP_META = {
   key:        { title: "Signing Key",             icon: "🔑" },
   tcb:        { title: "TCB Versions",            icon: "🧬" },
   data:       { title: "Measurement & Guest Data",icon: "📐" },
+  idblock:    { title: "ID Block & Auth",         icon: "🪪" },
   ids:        { title: "Identifiers & Signature", icon: "🔗" },
   mitigation: { title: "Mitigation Vectors",      icon: "🛡️" },
 };
@@ -154,6 +155,49 @@ function mitBody(r) {
   return `<div class="kv mit-kv">${rows}</div>${banner}${note}`;
 }
 
+// True if an ID block was supplied at launch. Without one, guest SVN / family /
+// image IDs and both key digests are all zero.
+function idBlockUsed(r) {
+  const nonZeroHex = (h) => !/^0*$/.test(h);
+  return (
+    r.guest_svn !== 0 ||
+    nonZeroHex(r.family_id) ||
+    nonZeroHex(r.image_id) ||
+    nonZeroHex(r.id_key_digest) ||
+    nonZeroHex(r.author_key_digest)
+  );
+}
+
+// ID Block & Auth card. Collects the guest-owner identity fields that trace
+// back to the ID block (guest SVN, family/image IDs) and the ID auth struct
+// (ID key + author key digests). A small sub-head marks each field's origin.
+// When no ID block was supplied at launch, these are all zero — call that out.
+function idBlockBody(r, L) {
+  const notice = !idBlockUsed(r)
+    ? `<div class="mit-diff same">No ID block was supplied at launch — every field below is zero. The ID block is optional; without one the firmware skips the identity check and these stay blank.</div>`
+    : "";
+
+  // ID block provides these three.
+  const blockRows = kv([
+    ["Guest SVN", r.guest_svn],
+    ["Family ID", `<code>${r.family_id}</code>`],
+    ["Image ID", `<code>${r.image_id}</code>`],
+  ], "idblock");
+
+  // ID auth struct provides these two digests.
+  const authRows =
+    hexBlock("ID key digest", r.id_key_digest, L.id_key_digest, "idblock") +
+    hexBlock("Author key digest", r.author_key_digest, L.author_key_digest, "idblock");
+
+  return (
+    notice +
+    `<div class="sub-head">From ID block <span>guest-owner struct, checked at launch</span></div>` +
+    blockRows +
+    `<div class="sub-head">From ID auth <span>signs the ID block; digests bound into every report</span></div>` +
+    authRows
+  );
+}
+
 // ---- per-group card bodies ------------------------------------------------
 // `L` is a map from field name -> layout row, so bodies can tag hex blocks.
 
@@ -162,15 +206,14 @@ function cardBody(groupId, r, L) {
     case "identity":
       return kv([
         ["Version", r.version],
-        ["Guest SVN", r.guest_svn],
         ["VMPL", r.vmpl],
         ["Signature algo", esc(r.sig_algo.name)],
-        ["Family ID", `<code>${r.family_id}</code>`],
-        ["Image ID", `<code>${r.image_id}</code>`],
         r.cpuid
           ? ["CPUID", `family ${hx(r.cpuid.family, 2)}, model ${hx(r.cpuid.model, 2)}, step ${r.cpuid.step}`]
           : ["CPUID", "— (v2 report)"],
       ], "identity");
+    case "idblock":
+      return idBlockBody(r, L);
     case "policy":
       return (
         kv([["ABI version", `${r.policy.abi_major}.${r.policy.abi_minor}`]], "policy") +
@@ -215,8 +258,6 @@ function cardBody(groupId, r, L) {
         hexBlock("Chip ID", r.chip_id, L.chip_id, "ids") +
         hexBlock("Report ID", r.report_id, L.report_id, "ids") +
         hexBlock("Report ID (MA)", r.report_id_ma, L.report_id_ma, "ids") +
-        hexBlock("ID key digest", r.id_key_digest, L.id_key_digest, "ids") +
-        hexBlock("Author key digest", r.author_key_digest, L.author_key_digest, "ids") +
         hexBlock("Signature", r.signature, L.signature, "ids")
       );
     case "mitigation":
@@ -235,7 +276,8 @@ function cardSummary(groupId, r) {
     case "key":        return r.key_info.signing_key;
     case "tcb":        return r.meta.generation + " layout";
     case "data":       return "SHA-384";
-    case "ids":        return "6 fields";
+    case "idblock":    return idBlockUsed(r) ? "in use" : "unused";
+    case "ids":        return "4 fields";
     case "mitigation": {
       const n = r.current_mit?.bits.length ?? 0;
       const added = r.mit_diff?.added.length ?? 0;

@@ -100,6 +100,11 @@ assert(r.meta.variant === "V5", `variant is V5 (got ${r.meta.variant})`);
 assert(r.meta.generation === "Genoa", `generation is Genoa (got ${r.meta.generation})`);
 assert(r.key_info.signing_key === "VCEK", `signing key is VCEK (got ${r.key_info.signing_key})`);
 
+// ID block fields are grouped under "idblock" (not identity/ids) in LAYOUT.
+const byName = Object.fromEntries(layoutForVariant("V5").map((f) => [f.name, f]));
+for (const n of ["guest_svn", "family_id", "image_id", "id_key_digest", "author_key_digest"])
+  assert(byName[n]?.group === "idblock", `${n} grouped under idblock (got ${byName[n]?.group})`);
+
 // Mitigation vectors (V5): structural decode into set-bit indices + diff.
 assert(r.launch_mit?.hex === "0x9", `launch mit hex 0x9 (got ${r.launch_mit?.hex})`);
 assert(JSON.stringify(r.launch_mit?.bits) === "[0,3]", `launch mit bits [0,3] (got ${JSON.stringify(r.launch_mit?.bits)})`);
@@ -134,6 +139,16 @@ assert(tipCount >= 40, `tooltips present on fields (${tipCount} data-tip attrs)`
 assert(html.includes('data-group="policy"'), "policy card rendered");
 assert(html.includes("Debugging is permitted"), "policy debug tooltip text present");
 assert(html.includes("cryptographic fingerprint"), "measurement tooltip text present");
+
+// ID Block & Auth card: sub-section heads + "unused" notice for the sample.
+assert(html.includes('data-group="idblock"'), "ID block card rendered");
+assert(html.includes("From ID block"), "ID block sub-head rendered");
+assert(html.includes("From ID auth"), "ID auth sub-head rendered");
+assert(html.includes("No ID block was supplied"), "unused-ID-block notice shown for sample");
+assert(html.includes("sets in the ID block to group"), "family-id idblock tooltip present");
+// Guest SVN / Family ID moved out of the identity card into idblock.
+const identityCard = html.slice(html.indexOf('data-group="identity"'), html.indexOf('data-group="policy"'));
+assert(!identityCard.includes("Family ID"), "Family ID no longer in identity card");
 
 // Mitigation card: bit chips + "no diff" banner + security-bulletin note.
 assert(html.includes('data-group="mitigation"'), "mitigation card rendered");

@@ -10,6 +10,7 @@
 [data-group="key"]        { --g: #d29922; }
 [data-group="tcb"]        { --g: #f778ba; }
 [data-group="data"]       { --g: #56d4dd; }
+[data-group="idblock"]    { --g: #7ee787; }
 [data-group="ids"]        { --g: #ff7b72; }
 [data-group="mitigation"] { --g: #e3b341; }
 
@@ -162,6 +163,20 @@
 }
 .copy:hover { color: var(--text); border-color: var(--accent); }
 .copy.done { color: var(--good); border-color: rgba(63,185,80,.4); }
+
+/* ---- ID block sub-section headers ---- */
+.sub-head {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 10px 16px 6px;
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--g);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--g) 7%, transparent);
+}
+.sub-head span {
+  font-weight: 400; letter-spacing: 0; text-transform: none;
+  font-size: 11px; color: var(--text-mut);
+}
 
 /* ---- mitigation vectors ---- */
 .mit-kv > div:nth-child(even) { display: block; }
