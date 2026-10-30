@@ -1,6 +1,7 @@
 // Attestation explorer UI — links a struct map (left) to decoded cards (right).
 import { mountChrome } from "../../assets/js/layout.js";
 import { decodeInput, parseAttestationReport, layoutForVariant } from "./parser.js";
+import { DESCRIPTIONS } from "./descriptions.js";
 
 mountChrome({ base: "../../" });
 
@@ -27,29 +28,40 @@ const GROUP_META = {
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 const hx = (n, pad = 3) => "0x" + n.toString(16).toUpperCase().padStart(pad, "0");
 
-function kv(pairs) {
+// Build the `data-tip` attribute for an element, looking the text up in
+// DESCRIPTIONS.fields[group][key]. Elements carrying data-tip get the hover
+// bubble (and a dotted underline) wired in wireTooltips(). Returns "" when
+// there's no description, so untagged fields stay plain.
+function tipAttr(group, key) {
+  const text = DESCRIPTIONS.fields?.[group]?.[key];
+  return text ? ` data-tip="${esc(text)}"` : "";
+}
+
+// kv rows carry a per-row tooltip keyed by the row label. Pass the group id so
+// the label can be looked up in DESCRIPTIONS.fields[group].
+function kv(pairs, group) {
   return `<div class="kv">${pairs
-    .map(([k, v]) => `<div>${esc(k)}</div><div>${v}</div>`)
+    .map(([k, v]) => `<div${tipAttr(group, k)}>${esc(k)}</div><div>${v}</div>`)
     .join("")}</div>`;
 }
 
-function flags(obj, labels) {
+function flags(obj, labels, group) {
   return `<div class="flags">${labels
     .map(([key, label]) => {
       const on = obj[key] === true;
-      return `<span class="flag ${on ? "on" : "off"}">${esc(label)} <span class="v">${on ? "✓" : "✗"}</span></span>`;
+      return `<span class="flag ${on ? "on" : "off"}"${tipAttr(group, key)}>${esc(label)} <span class="v">${on ? "✓" : "✗"}</span></span>`;
     })
     .join("")}</div>`;
 }
 
 // A hex block tagged with the field it came from, so clicking its offset chip
 // can cross-link back to the struct map.
-function hexBlock(label, hex, field) {
+function hexBlock(label, hex, field, group) {
   const chip = field ? `<span class="off-chip" data-off="${field.off}">${hx(field.off)} · ${field.size}B</span>` : "";
   return `
     <div class="hexblock" ${field ? `data-off="${field.off}"` : ""}>
       <div class="hexblock-head">
-        ${label ? `<label class="field-label">${esc(label)}</label>` : ""}
+        ${label ? `<label class="field-label"${tipAttr(group, label)}>${esc(label)}</label>` : ""}
         ${chip}
       </div>
       <div class="hexrow">
@@ -79,17 +91,17 @@ function tcbTable(r) {
   ];
   return `
     <table class="tcb-table">
-      <thead><tr><th>Field</th>${cols.map(([c]) => `<th>${c}</th>`).join("")}</tr></thead>
+      <thead><tr><th>Field</th>${cols.map(([c]) => `<th${tipAttr("tcb", c)}>${c}</th>`).join("")}</tr></thead>
       <tbody>
         ${rows
           .map(
             ([label, key]) =>
-              `<tr><td>${label}</td>${cols
+              `<tr><td${tipAttr("tcb", label)}>${label}</td>${cols
                 .map(([, tcb]) => `<td>${tcbField(tcb[key])}</td>`)
                 .join("")}</tr>`
           )
           .join("")}
-        <tr class="build-row"><td>Build (maj.min.bld)</td>
+        <tr class="build-row"><td${tipAttr("tcb", "Build (maj.min.bld)")}>Build (maj.min.bld)</td>
           <td>${esc(r.current_build)}</td><td>—</td>
           <td>${esc(r.committed_build)}</td><td>—</td></tr>
       </tbody>
@@ -112,10 +124,10 @@ function cardBody(groupId, r, L) {
         r.cpuid
           ? ["CPUID", `family ${hx(r.cpuid.family, 2)}, model ${hx(r.cpuid.model, 2)}, step ${r.cpuid.step}`]
           : ["CPUID", "— (v2 report)"],
-      ]);
+      ], "identity");
     case "policy":
       return (
-        kv([["ABI version", `${r.policy.abi_major}.${r.policy.abi_minor}`]]) +
+        kv([["ABI version", `${r.policy.abi_major}.${r.policy.abi_minor}`]], "policy") +
         flags(r.policy, [
           ["smt_allowed", "SMT"],
           ["migrate_ma_allowed", "Migrate MA"],
@@ -126,7 +138,7 @@ function cardBody(groupId, r, L) {
           ["rapl_dis", "RAPL disabled"],
           ["ciphertext_hiding", "Ciphertext hiding"],
           ["page_swap_disabled", "Page swap disabled"],
-        ])
+        ], "policy")
       );
     case "platform":
       return flags(r.plat_info, [
@@ -137,35 +149,35 @@ function cardBody(groupId, r, L) {
         ["ciphertext_hiding_enabled", "Ciphertext hiding"],
         ["alias_check_complete", "Alias check"],
         ["tio_enabled", "SEV-TIO"],
-      ]);
+      ], "platform");
     case "key":
       return kv([
         ["Signing key", `<b>${esc(r.key_info.signing_key)}</b>`],
         ["Author key present", r.key_info.author_key_en ? "yes" : "no"],
         ["Mask chip key", r.key_info.mask_chip_key ? "yes" : "no"],
-      ]);
+      ], "key");
     case "tcb":
       return tcbTable(r);
     case "data":
       return (
-        hexBlock("Measurement", r.measurement, L.measurement) +
-        hexBlock("Report data", r.report_data, L.report_data) +
-        hexBlock("Host data", r.host_data, L.host_data)
+        hexBlock("Measurement", r.measurement, L.measurement, "data") +
+        hexBlock("Report data", r.report_data, L.report_data, "data") +
+        hexBlock("Host data", r.host_data, L.host_data, "data")
       );
     case "ids":
       return (
-        hexBlock("Chip ID", r.chip_id, L.chip_id) +
-        hexBlock("Report ID", r.report_id, L.report_id) +
-        hexBlock("Report ID (MA)", r.report_id_ma, L.report_id_ma) +
-        hexBlock("ID key digest", r.id_key_digest, L.id_key_digest) +
-        hexBlock("Author key digest", r.author_key_digest, L.author_key_digest) +
-        hexBlock("Signature", r.signature, L.signature)
+        hexBlock("Chip ID", r.chip_id, L.chip_id, "ids") +
+        hexBlock("Report ID", r.report_id, L.report_id, "ids") +
+        hexBlock("Report ID (MA)", r.report_id_ma, L.report_id_ma, "ids") +
+        hexBlock("ID key digest", r.id_key_digest, L.id_key_digest, "ids") +
+        hexBlock("Author key digest", r.author_key_digest, L.author_key_digest, "ids") +
+        hexBlock("Signature", r.signature, L.signature, "ids")
       );
     case "mitigation":
       return kv([
         ["Launch mit. vector", `<code>${esc(r.launch_mit_vector ?? "—")}</code>`],
         ["Current mit. vector", `<code>${esc(r.current_mit_vector ?? "—")}</code>`],
-      ]);
+      ], "mitigation");
     default:
       return "";
   }
@@ -228,12 +240,13 @@ function render(r) {
   const cards = groups
     .map((g) => {
       const m = GROUP_META[g];
+      const gtip = DESCRIPTIONS.groups?.[g];
       return `
         <section class="group" data-group="${g}" tabindex="0">
           <div class="group-head">
             <span class="swatch"></span>
             <span class="g-icon">${m.icon}</span>
-            <span class="g-title">${esc(m.title)}</span>
+            <span class="g-title"${gtip ? ` data-tip="${esc(gtip)}"` : ""}>${esc(m.title)}</span>
             <span class="g-summary">${esc(cardSummary(g, r))}</span>
             <span class="pin-dot" title="Pinned">📌</span>
           </div>
@@ -256,6 +269,7 @@ function render(r) {
     </div>`;
 
   wireInteractions();
+  wireTooltips();
 }
 
 // ---- interactions ---------------------------------------------------------
@@ -344,6 +358,67 @@ function wireInteractions() {
     el.classList.add("flash");
   }
 }
+
+// ---- hover tooltips -------------------------------------------------------
+// One floating bubble, appended to <body> (not inside a card — cards use
+// overflow:hidden and would clip it). Any element with a `data-tip` attribute
+// gets the bubble on hover/focus. Positioned above the element, clamped to the
+// viewport, flipping below if there isn't room above.
+
+let tipEl = null;
+function tooltipBubble() {
+  if (!tipEl) {
+    tipEl = document.createElement("div");
+    tipEl.className = "tip-bubble";
+    tipEl.setAttribute("role", "tooltip");
+    document.body.appendChild(tipEl);
+  }
+  return tipEl;
+}
+
+function showTip(target) {
+  const text = target.dataset.tip;
+  if (!text) return;
+  const bub = tooltipBubble();
+  bub.textContent = text;
+  bub.classList.add("show");
+
+  // Measure, then place. Default above; flip below if clipped at the top.
+  const r = target.getBoundingClientRect();
+  const b = bub.getBoundingClientRect();
+  const margin = 8;
+  let top = r.top - b.height - margin;
+  let below = false;
+  if (top < margin) { top = r.bottom + margin; below = true; }
+
+  let left = r.left + r.width / 2 - b.width / 2;
+  left = Math.max(margin, Math.min(left, window.innerWidth - b.width - margin));
+
+  bub.style.top = `${top}px`;
+  bub.style.left = `${left}px`;
+  bub.classList.toggle("below", below);
+}
+
+function hideTip() {
+  if (tipEl) tipEl.classList.remove("show");
+}
+
+function wireTooltips() {
+  const targets = out.querySelectorAll("[data-tip]");
+  targets.forEach((t) => {
+    t.classList.add("has-tip");
+    t.addEventListener("mouseenter", () => showTip(t));
+    t.addEventListener("mouseleave", hideTip);
+    // keyboard access: tabindex so focus works, Esc dismisses
+    if (!t.hasAttribute("tabindex")) t.setAttribute("tabindex", "0");
+    t.addEventListener("focus", () => showTip(t));
+    t.addEventListener("blur", hideTip);
+  });
+}
+
+// Dismiss the bubble on scroll (its anchor moves) and on Escape.
+window.addEventListener("scroll", hideTip, true);
+window.addEventListener("keydown", (e) => { if (e.key === "Escape") hideTip(); });
 
 // ---- events ---------------------------------------------------------------
 
